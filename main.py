@@ -220,6 +220,26 @@ def pad_mfccrav(mfcc):
         mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
     return mfcc
 
+# Function to pad MFCC to a defined length
+def pad_mfccrav(mfcc, max_length=100):
+    if mfcc.shape[1] > max_length:
+        return mfcc[:, :max_length]
+    else:
+        pad_width = max_length - mfcc.shape[1]
+        return np.pad(mfcc, ((0, 0), (0, pad_width)), mode='constant')
+
+# Dictionary of emotions
+emotions = {
+    '01': 'neutral',
+    '02': 'calm',
+    '03': 'happy',
+    '04': 'sad',
+    '05': 'angry',
+    '06': 'fearful',
+    '07': 'disgust',
+    '08': 'surprised'
+}
+
 # Function to train on the RAVDESS dataset
 def train_ravdess(args):
     # Initialize lists to store data, labels, and synthetic vertices
@@ -266,15 +286,18 @@ def train_ravdess(args):
     labels = torch.tensor(labels, dtype=torch.long)
     synthetic_vertices = torch.tensor(synthetic_vertices, dtype=torch.float32)
 
-    # Split data into training and testing sets
-    X_train, X_test, y_train, y_test, vertices_train, vertices_test = train_test_split(
-        data, labels, synthetic_vertices, test_size=0.2, random_state=seed
-    )
+    # Calculate dataset sizes for training, validation, and test sets
+    total_size = len(data)
+    train_size = int(0.8 * total_size)
+    val_size = test_size = (total_size - train_size) // 2
 
-    # Define datasets and dataloaders for training and testing
-    train_dataset = TensorDataset(X_train, y_train, vertices_train)
-    test_dataset = TensorDataset(X_test, y_test, vertices_test)
+    # Split the dataset into training, validation, and test sets
+    dataset = TensorDataset(data, labels, synthetic_vertices)
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+
+    # Define dataloaders for training, validation, and testing
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
     # Initialize the model and set the device (GPU if available, otherwise CPU)
@@ -308,7 +331,7 @@ def train_ravdess(args):
             running_loss += loss.item() * inputs.size(0)  # Accumulate training loss
         
         epoch_loss = running_loss / len(train_loader.dataset)  # Average training loss
-        print(f"Epoch [{epoch+1}/{num_epochs}]")
+        print(f"Epoch [{epoch+1}/{num_epochs}] - Loss: {epoch_loss:.4f}")
         
         # Update learning rate based on the average training loss
         scheduler.step(epoch_loss)
@@ -351,6 +374,7 @@ def train_ravdess(args):
     print(f"Lip Average Error (LAE): {LAE:.3f}")
     print(f"Lip Vertex Error (LVE): {LVE:.3f}")
     print(f"Emotional Vertex Error (EVE): {EVE:.3f}")
+
 
 
 # Training function
